@@ -361,3 +361,38 @@ export async function syncGoogleBookings(url: string) {
         return { success: false, error: 'Sync failed' }
     }
 }
+// ... existing code ...
+
+export async function initializeData() {
+    try {
+        const items = [
+            { name: 'ボックスシーツ', unit: '枚', formulaType: 'SIMPLE', id: 'box-sheet' },
+            { name: 'デュベカバー', unit: '枚', formulaType: 'SIMPLE', id: 'duvet-cover' },
+            { name: '枕カバー', unit: '枚', formulaType: 'SIMPLE', id: 'pillow-cover' },
+            { name: 'バスタオル', unit: '枚', formulaType: 'TOWEL_B', id: 'bath-towel' },
+            { name: 'フェイスタオル', unit: '枚', formulaType: 'TOWEL_F', id: 'face-towel' },
+        ];
+
+        let count = 0;
+        for (const item of items) {
+            const existing = await prisma.item.findUnique({ where: { id: item.id } })
+            if (!existing) {
+                await prisma.item.create({ data: item })
+                count++
+            }
+
+            // Ensure stock snapshot exists
+            const stock = await prisma.stockSnapshot.findUnique({ where: { itemId: item.id } })
+            if (!stock) {
+                await prisma.stockSnapshot.create({
+                    data: { itemId: item.id, shelfCount: 0 }
+                })
+            }
+        }
+        revalidatePath('/')
+        return { success: true, count }
+    } catch (error) {
+        console.error('Init failed:', error)
+        return { success: false, error: String(error) }
+    }
+}

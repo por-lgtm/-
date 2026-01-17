@@ -138,11 +138,34 @@ export default function ImportPage() {
                 </section>
 
                 {/* Status Message */}
-                {status && (
-                    <div className={status.startsWith('エラー') ? "text-red-600 font-bold text-center" : "text-green-600 font-bold text-center"}>
-                        {status}
-                    </div>
+                <div className={status.startsWith('エラー') ? "text-red-600 font-bold text-center" : "text-green-600 font-bold text-center"}>
+                    {status}
+                </div>
                 )}
+
+                {/* Emergency Init Button */}
+                <div className="pt-8 border-t border-slate-200 text-center">
+                    <p className="text-sm text-slate-500 mb-2">※画面に何も表示されない場合のみ使用してください</p>
+                    <button
+                        onClick={async () => {
+                            if (!confirm('本当に初期データを登録しますか？')) return
+                            setIsLoading(true)
+                            setStatus('初期データ登録中...')
+                            const { initializeData } = await import('@/app/actions')
+                            const result = await initializeData()
+                            setIsLoading(false)
+                            if (result.success) {
+                                setStatus(`完了: ${result.count}件のデータを登録しました`)
+                            } else {
+                                setStatus(`エラー: ${result.error}`)
+                            }
+                        }}
+                        disabled={isLoading}
+                        className="text-xs text-slate-400 hover:text-red-500 underline"
+                    >
+                        [緊急用] 初期データの再登録
+                    </button>
+                </div>
             </div>
         </main>
     )
