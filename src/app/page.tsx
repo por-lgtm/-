@@ -6,9 +6,22 @@ import { StockProvider } from '@/components/StockProvider'
 import GlobalSaveButton from '@/components/GlobalSaveButton'
 import AutoSync from '@/components/AutoSync'
 import ForecastTable from '@/components/ForecastTable'
+import InitDataButton from '@/components/InitDataButton'
 
 export default async function Home() {
   const data = await getForecastData(45) // 45 days forecast
+
+  // Check if data is empty
+  if (Object.keys(data.stockMap).length === 0) {
+    return (
+      <main className="min-h-screen bg-slate-50 p-8">
+        <header className="mb-8">
+          <h1 className="text-2xl font-bold text-slate-800">Linen Keeper</h1>
+        </header>
+        <InitDataButton />
+      </main>
+    )
+  }
 
   // Calculate first shortage date for each item
   const shortageDates: Record<string, string> = {}
