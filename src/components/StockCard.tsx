@@ -77,7 +77,6 @@ export default function StockCard({ id, name, current, shortageDate }: StockCard
                             itemName={name}
                             currentCount={current}
                             onClose={() => setOpen(false)}
-                            initialMode="ADD"
                         />
                     </DialogContent>
                 </Dialog>
