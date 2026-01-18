@@ -32,12 +32,12 @@ export default function ForecastTable({ stockMap, forecast, thresholds }: Foreca
         <div className="bg-white rounded-lg shadow overflow-hidden border">
             {/* Scrollable Container with Sticky Header */}
             <div className="max-h-[75vh] overflow-auto relative">
-                <table className="w-full text-sm text-left border-collapse">
+                <table className="w-full text-xs md:text-sm text-left border-collapse">
                     <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0 z-40 shadow-sm">
                         <tr>
-                            <th className="p-3 border-b border-black min-w-[100px] whitespace-nowrap bg-slate-100 z-50 sticky left-0 border-r border-black">日付</th>
+                            <th className="p-2 md:p-3 border-b border-black min-w-[80px] md:min-w-[100px] whitespace-nowrap bg-slate-100 z-50 sticky left-0 border-r border-black">日付</th>
                             {itemIds.map(id => (
-                                <th key={id} className="p-3 border-b border-black min-w-[80px] text-center whitespace-nowrap bg-slate-100 border-r border-black last:border-r-0">
+                                <th key={id} className="p-2 md:p-3 border-b border-black min-w-[60px] md:min-w-[80px] text-center whitespace-nowrap bg-slate-100 border-r border-black last:border-r-0">
                                     {stockMap[id].name}
                                 </th>
                             ))}
@@ -60,7 +60,7 @@ export default function ForecastTable({ stockMap, forecast, thresholds }: Foreca
                                     {/* Sticky Date Column - Clickable */}
                                     <td
                                         className={clsx(
-                                            "p-3 font-mono font-medium bg-white sticky left-0 z-20 border-r border-black shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] transition-colors",
+                                            "p-2 md:p-3 font-mono font-medium bg-white sticky left-0 z-20 border-r border-black shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] transition-colors",
                                             hasEvents ? "cursor-pointer hover:bg-blue-50 text-blue-700 underline decoration-blue-300 underline-offset-4" : "text-slate-600"
                                         )}
                                         onClick={() => {
@@ -70,7 +70,7 @@ export default function ForecastTable({ stockMap, forecast, thresholds }: Foreca
                                         }}
                                     >
                                         {format(new Date(date), 'MM/dd(eee)', { locale: ja })}
-                                        <span className="text-xs text-slate-400 block">{format(new Date(date), 'yyyy')}</span>
+                                        <span className="text-[10px] md:text-xs text-slate-400 block">{format(new Date(date), 'yyyy')}</span>
                                     </td>
                                     {itemIds.map(itemId => {
                                         const cell = forecast[date][itemId]
@@ -92,7 +92,7 @@ export default function ForecastTable({ stockMap, forecast, thresholds }: Foreca
                                             <td
                                                 key={itemId}
                                                 className={clsx(
-                                                    "p-3 text-center border-r border-black last:border-r-0 font-mono",
+                                                    "p-2 md:p-3 text-center border-r border-black last:border-r-0 font-mono",
                                                     textColor
                                                 )}
                                             >

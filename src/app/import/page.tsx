@@ -141,7 +141,6 @@ export default function ImportPage() {
                 <div className={status.startsWith('エラー') ? "text-red-600 font-bold text-center" : "text-green-600 font-bold text-center"}>
                     {status}
                 </div>
-                )}
 
                 {/* Emergency Init Button */}
                 <div className="pt-8 border-t border-slate-200 text-center">
