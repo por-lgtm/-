@@ -58,18 +58,18 @@ export default async function Home() {
       <AutoSync />
       <main className="min-h-screen bg-slate-50 pb-20">
         {/* Header */}
-        <header className="bg-white border-b sticky top-0 z-10 px-4 py-3 flex items-center justify-between shadow-sm">
-          <h1 className="text-xl font-bold text-slate-800">Linen Keeper</h1>
+        <header className="bg-white border-b sticky top-0 z-10 flex flex-wrap items-center justify-between shadow-sm px-4 py-3 gap-2">
+          <h1 className="text-lg md:text-xl font-bold text-slate-800">Linen Keeper</h1>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4">
             {/* Global Confirm Button */}
             <GlobalSaveButton />
 
-            <div className="w-px h-8 bg-slate-200 mx-2"></div>
+            <div className="w-px h-6 bg-slate-200 mx-1 md:mx-2"></div>
 
-            <div className="flex gap-2">
-              <Link href="/import" className="text-sm bg-slate-100 px-3 py-2 rounded font-bold text-slate-900 hover:bg-slate-200 transition-colors">予約取込</Link>
-              <Link href="/logs" className="text-sm bg-slate-100 px-3 py-2 rounded font-bold text-slate-900 hover:bg-slate-200 transition-colors">履歴</Link>
+            <div className="flex gap-1">
+              <Link href="/import" className="text-xs md:text-sm bg-slate-100 px-2 py-1.5 md:px-3 md:py-2 rounded font-bold text-slate-900 hover:bg-slate-200 transition-colors">予約</Link>
+              <Link href="/logs" className="text-xs md:text-sm bg-slate-100 px-2 py-1.5 md:px-3 md:py-2 rounded font-bold text-slate-900 hover:bg-slate-200 transition-colors">履歴</Link>
             </div>
           </div>
         </header>
