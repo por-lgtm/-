@@ -14,6 +14,23 @@ export type BookingRow = {
     guests: string
 }
 
+export type AnalysisResult = {
+    success: boolean
+    totalRows: number
+    validCount: number
+    errorCount: number
+    rows: {
+        rowNumber: number
+        date?: string
+        name?: string
+        guests?: number
+        isValid: boolean
+        error?: string
+        rawData: any
+    }[]
+    error?: string
+}
+
 // --- Constants & Formulas ---
 function ceilHalf(n: number) {
     return Math.ceil(n / 2)
@@ -28,6 +45,29 @@ function calculateConsumption(guests: number, formulaType: string): number {
         case 'TOWEL_F': return N + ceilHalf(N) + 3
         default: return N
     }
+}
+
+function parseFlexibleDate(dateStr: string): Date {
+    if (!dateStr) return new Date(NaN)
+
+    // Normalize separators
+    const normalized = dateStr.replaceAll('/', '-')
+
+    // Try standard parseISO first
+    const d1 = parseISO(normalized)
+    if (!isNaN(d1.getTime())) return d1
+
+    // Handle single digit month/day (YYYY-M-D -> YYYY-MM-DD)
+    const parts = normalized.split('-')
+    if (parts.length === 3) {
+        const y = parts[0]
+        const m = parts[1].padStart(2, '0')
+        const day = parts[2].padStart(2, '0')
+        const d2 = parseISO(`${y}-${m}-${day}`)
+        if (!isNaN(d2.getTime())) return d2
+    }
+
+    return new Date(NaN)
 }
 
 // --- Actions ---
@@ -110,7 +150,12 @@ export async function importBookings(formData: FormData) {
             if (!row.booking_id || !row.checkin_date || !row.guests) continue
             const guests = parseInt(row.guests, 10)
             if (isNaN(guests)) continue
-            const checkIn = parseISO(row.checkin_date)
+
+            const checkIn = parseFlexibleDate(row.checkin_date)
+            if (isNaN(checkIn.getTime())) {
+                console.error(`Invalid date in CSV: ${row.checkin_date}`)
+                continue
+            }
 
             await prisma.booking.upsert({
                 where: { bookingId: row.booking_id },
@@ -315,9 +360,12 @@ export async function syncGoogleBookings(url: string) {
             const guests = parseInt(guestsStr, 10)
             if (isNaN(guests)) continue
 
-            const normalizedDate = dateStr.replaceAll('/', '-')
-            const checkIn = parseISO(normalizedDate)
-            const bookingId = `${normalizedDate}-${name}`
+            const checkIn = parseFlexibleDate(dateStr)
+            if (isNaN(checkIn.getTime())) continue
+
+            // Re-format normalizedDate for ID stability (YYYY-MM-DD)
+            const stableDateStr = format(checkIn, 'yyyy-MM-dd')
+            const bookingId = `${stableDateStr}-${name}`
             validBookingIds.add(bookingId)
 
             await prisma.booking.upsert({
@@ -358,7 +406,103 @@ export async function syncGoogleBookings(url: string) {
         return { success: true, count }
     } catch (error) {
         console.error('Sync failed:', error)
-        return { success: false, error: 'Sync failed' }
+        return { success: false, error: String(error) }
+    }
+}
+
+export async function analyzeGoogleSheet(url: string): Promise<AnalysisResult> {
+    if (!url) return { success: false, totalRows: 0, validCount: 0, errorCount: 0, rows: [], error: 'URL is required' }
+
+    try {
+        let csvUrl = url
+        if (url.includes('/pubhtml')) {
+            csvUrl = url.replace('/pubhtml', '/pub?output=csv')
+        } else if (url.includes('/edit')) {
+            csvUrl = url.replace(/\/edit.*$/, '/export?format=csv')
+        }
+
+        console.log('Analyzing CSV from:', csvUrl)
+        const res = await fetch(csvUrl)
+        if (!res.ok) throw new Error('Failed to fetch CSV')
+        const text = await res.text()
+        const { data } = Papa.parse(text, { header: true, skipEmptyLines: true })
+
+        const rows: AnalysisResult['rows'] = []
+        let validCount = 0
+        let errorCount = 0
+
+        // @ts-ignore
+        data.forEach((row: any, index: number) => {
+            const rowNumber = index + 2 // 1-based + header
+            const dateStr = row['日付']
+            const name = row['宿泊者名'] ?? row['人数'] // Fallback logic same as sync
+            const guestsStr = row['人数'] ?? row['備考']
+
+            let isValid = true
+            let error = undefined
+            let parsedDate = undefined
+            let parsedGuests = undefined
+
+            if (!dateStr) {
+                isValid = false
+                error = '日付が空です'
+            } else {
+                const d = parseFlexibleDate(dateStr)
+                if (isNaN(d.getTime())) {
+                    isValid = false
+                    error = `日付形式が不正です (${dateStr})`
+                } else {
+                    parsedDate = format(d, 'yyyy-MM-dd')
+                }
+            }
+
+            if (!guestsStr) {
+                // If guests is missing, it might be valid if it's not a booking row?
+                // But simplified logic: if date is present, we expect a booking.
+                if (isValid) {
+                    isValid = false
+                    error = '人数(または宿泊者名)が空です'
+                }
+            } else {
+                const g = parseInt(guestsStr, 10)
+                if (isNaN(g)) {
+                    if (isValid) {
+                        isValid = false
+                        error = `人数が数値ではありません (${guestsStr})`
+                    }
+                } else {
+                    parsedGuests = g
+                }
+            }
+
+            if (isValid) {
+                validCount++
+            } else {
+                errorCount++
+            }
+
+            rows.push({
+                rowNumber,
+                date: parsedDate ?? dateStr, // Show parsed if success, else raw
+                name: name,
+                guests: parsedGuests,
+                isValid,
+                error,
+                rawData: row
+            })
+        })
+
+        return {
+            success: true,
+            totalRows: data.length,
+            validCount,
+            errorCount,
+            rows: rows.sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''))
+        }
+
+    } catch (error) {
+        console.error('Analysis failed:', error)
+        return { success: false, totalRows: 0, validCount: 0, errorCount: 0, rows: [], error: String(error) }
     }
 }
 // ... existing code ...
