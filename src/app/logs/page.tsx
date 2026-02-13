@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import HistoryTable from '@/components/HistoryTable'
 
+export const dynamic = 'force-dynamic'
+
 export default async function LogsPage() {
     const { stockMap, history } = await getHistoryData(90) // 90 days history
 
