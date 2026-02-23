@@ -103,7 +103,16 @@ export async function updateStock(itemId: string, delta: number, reason: StockUp
             const detail = memo
                 ? `${reason}: ${memo}`
                 : reason === 'CORRECTION' ? '棚卸(修正)' : '在庫調整'
-            await pushToHistorySheet(webhookUrl, detail).catch(e =>
+            const ITEM_MAP_LOCAL: Record<string, string> = {
+                'box-sheet': 'ボックスシーツ',
+                'duvet-cover': 'デュベカバー',
+                'pillow-cover': '枝カバー',
+                'bath-towel': 'バスタオル',
+                'face-towel': 'フェイスタオル',
+            }
+            const colName = ITEM_MAP_LOCAL[itemId]
+            const deltaMap = colName ? { [colName]: finalDelta } : {}
+            await pushToHistorySheet(webhookUrl, detail, deltaMap).catch(e =>
                 console.error('History sheet push failed (ignored):', e)
             )
         }
@@ -144,7 +153,19 @@ export async function updateStockBatch(updates: { itemId: string, delta: number 
         const FALLBACK_WEBHOOK = 'https://script.google.com/macros/s/AKfycbx2XECLFaIwKb0vtYpcudSp4taw-0pWogFAfQLHUj_CeznKdF1ieAYycOYLTm6QzoJ4/exec'
         const webhookUrl = (await getSystemSetting('HISTORY_WEBHOOK_URL')) || FALLBACK_WEBHOOK
         if (webhookUrl) {
-            await pushToHistorySheet(webhookUrl, '在庫調整 (一括)').catch(e =>
+            const ITEM_MAP_LOCAL: Record<string, string> = {
+                'box-sheet': 'ボックスシーツ',
+                'duvet-cover': 'デュベカバー',
+                'pillow-cover': '枝カバー',
+                'bath-towel': 'バスタオル',
+                'face-towel': 'フェイスタオル',
+            }
+            const deltaMap: Record<string, number> = {}
+            for (const u of updates) {
+                const colName = ITEM_MAP_LOCAL[u.itemId]
+                if (colName) deltaMap[colName] = u.delta
+            }
+            await pushToHistorySheet(webhookUrl, '在庫調整 (一括)', deltaMap).catch(e =>
                 console.error('History sheet push failed (ignored):', e)
             )
         }
@@ -655,7 +676,7 @@ export async function initializeData() {
  * 各品目の最新在庫スナップショットを取得して送信する。
  * 失敗時は例外をthrowするので、呼び出し元でcatchすること。
  */
-async function pushToHistorySheet(webhookUrl: string, detail: string) {
+async function pushToHistorySheet(webhookUrl: string, detail: string, deltaMap?: Record<string, number>) {
     // 品目IDとスプシ列名のマッピング
     const ITEM_MAP: Record<string, string> = {
         'box-sheet': 'ボックスシーツ',
@@ -681,6 +702,13 @@ async function pushToHistorySheet(webhookUrl: string, detail: string) {
     const date = `${jst.getUTCFullYear()}/${String(jst.getUTCMonth() + 1).padStart(2, '0')}/${String(jst.getUTCDate()).padStart(2, '0')}`
     const time = `${String(jst.getUTCHours()).padStart(2, '0')}:${String(jst.getUTCMinutes()).padStart(2, '0')}`
 
+    // 変動量を +/-付き文字列に変換
+    const deltaEntries = deltaMap
+        ? Object.fromEntries(
+            Object.entries(deltaMap).map(([k, v]) => [`${k}変動`, v > 0 ? `+${v}` : String(v)])
+        )
+        : {}
+
     // GETパラメータとして送信（POSTのリダイレクト問題を回避）
     const params = new URLSearchParams({
         date,
@@ -688,7 +716,8 @@ async function pushToHistorySheet(webhookUrl: string, detail: string) {
         detail,
         ...Object.fromEntries(
             Object.entries(stockMap).map(([k, v]) => [k, String(v)])
-        )
+        ),
+        ...deltaEntries
     })
 
     const url = `${webhookUrl}?${params.toString()}`
@@ -702,6 +731,7 @@ async function pushToHistorySheet(webhookUrl: string, detail: string) {
         throw new Error(`Webhook responded with status ${res.status}`)
     }
 }
+
 
 export async function saveHistoryWebhookUrl(url: string) {
     return saveSystemSetting('HISTORY_WEBHOOK_URL', url)
