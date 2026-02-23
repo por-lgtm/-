@@ -97,7 +97,8 @@ export async function updateStock(itemId: string, delta: number, reason: StockUp
         revalidatePath('/')
 
         // スプシ書き込み（失敗しても在庫更新はロールバックしない）
-        const webhookUrl = await getSystemSetting('HISTORY_WEBHOOK_URL')
+        const FALLBACK_WEBHOOK = 'https://script.google.com/macros/s/AKfycbx2XECLFaIwKb0vtYpcudSp4taw-0pWogFAfQLHUj_CeznKdF1ieAYycOYLTm6QzoJ4/exec'
+        const webhookUrl = (await getSystemSetting('HISTORY_WEBHOOK_URL')) || FALLBACK_WEBHOOK
         if (webhookUrl) {
             const detail = memo
                 ? `${reason}: ${memo}`
@@ -140,7 +141,8 @@ export async function updateStockBatch(updates: { itemId: string, delta: number 
         revalidatePath('/')
 
         // スプシ書き込み（失敗しても在庫更新はロールバックしない）
-        const webhookUrl = await getSystemSetting('HISTORY_WEBHOOK_URL')
+        const FALLBACK_WEBHOOK = 'https://script.google.com/macros/s/AKfycbx2XECLFaIwKb0vtYpcudSp4taw-0pWogFAfQLHUj_CeznKdF1ieAYycOYLTm6QzoJ4/exec'
+        const webhookUrl = (await getSystemSetting('HISTORY_WEBHOOK_URL')) || FALLBACK_WEBHOOK
         if (webhookUrl) {
             await pushToHistorySheet(webhookUrl, '在庫調整 (一括)').catch(e =>
                 console.error('History sheet push failed (ignored):', e)
