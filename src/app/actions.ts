@@ -112,7 +112,7 @@ export async function updateStock(itemId: string, delta: number, reason: StockUp
             }
             const colName = ITEM_MAP_LOCAL[itemId]
             const deltaMap = colName ? { [colName]: finalDelta } : {}
-            await pushToHistorySheet(webhookUrl, detail, deltaMap).catch(e =>
+            void pushToHistorySheet(webhookUrl, detail, deltaMap).catch(e =>
                 console.error('History sheet push failed (ignored):', e)
             )
         }
@@ -165,7 +165,7 @@ export async function updateStockBatch(updates: { itemId: string, delta: number 
                 const colName = ITEM_MAP_LOCAL[u.itemId]
                 if (colName) deltaMap[colName] = u.delta
             }
-            await pushToHistorySheet(webhookUrl, '在庫調整 (一括)', deltaMap).catch(e =>
+            void pushToHistorySheet(webhookUrl, '在庫調整 (一括)', deltaMap).catch(e =>
                 console.error('History sheet push failed (ignored):', e)
             )
         }
