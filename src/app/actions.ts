@@ -507,6 +507,90 @@ export async function analyzeGoogleSheet(url: string): Promise<AnalysisResult> {
 }
 // ... existing code ...
 
+export async function syncStockSheet(url: string): Promise<{
+    success: boolean
+    count?: number
+    changes?: { name: string; before: number; after: number }[]
+    date?: string
+    detail?: string
+    error?: string
+}> {
+    if (!url) return { success: false, error: 'URL is required' }
+
+    try {
+        let csvUrl = url
+        if (url.includes('/pubhtml')) {
+            csvUrl = url.replace('/pubhtml', '/pub?output=csv')
+        } else if (url.includes('/edit')) {
+            csvUrl = url.replace(/\/edit.*$/, '/export?format=csv')
+        }
+
+        const res = await fetch(csvUrl, { cache: 'no-store' })
+        if (!res.ok) throw new Error('CSVの取得に失敗しました')
+        const text = await res.text()
+        const { data } = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true })
+
+        if (data.length === 0) return { success: false, error: 'スプレッドシートにデータがありません' }
+
+        // 最新行（最終行）を使用
+        const latestRow = data[data.length - 1]
+
+        // 列名 → Item.name のマッピング（スプシの列名とDB上の品目名が一致）
+        const ITEM_NAME_COLUMNS = ['ボックスシーツ', 'デュベカバー', '枕カバー', 'バスタオル', 'フェイスタオル']
+
+        const items = await prisma.item.findMany()
+        const snapshots = await prisma.stockSnapshot.findMany()
+
+        const changes: { name: string; before: number; after: number }[] = []
+        const dateStr = latestRow['変更日'] ?? ''
+        const detail = latestRow['詳細'] ?? '棚卸し同期'
+
+        for (const colName of ITEM_NAME_COLUMNS) {
+            const raw = latestRow[colName]
+            if (raw === undefined || raw === '') continue
+
+            const newCount = parseInt(raw, 10)
+            if (isNaN(newCount)) continue
+
+            // DBのItemを名前で検索
+            const item = items.find(i => i.name === colName)
+            if (!item) continue
+
+            const currentSnap = snapshots.find(s => s.itemId === item.id)
+            const currentCount = currentSnap?.shelfCount ?? 0
+
+            if (currentCount === newCount) continue // 変化なし
+
+            const delta = newCount - currentCount
+
+            // イベント記録 + スナップショット更新
+            await prisma.$transaction([
+                prisma.actualEvent.create({
+                    data: {
+                        itemId: item.id,
+                        delta,
+                        reason: 'CORRECTION',
+                        memo: `棚卸しスプシ同期: ${dateStr} ${detail}`
+                    }
+                }),
+                prisma.stockSnapshot.upsert({
+                    where: { itemId: item.id },
+                    update: { shelfCount: newCount },
+                    create: { itemId: item.id, shelfCount: newCount }
+                })
+            ])
+
+            changes.push({ name: colName, before: currentCount, after: newCount })
+        }
+
+        revalidatePath('/')
+        return { success: true, count: changes.length, changes, date: dateStr, detail }
+    } catch (error) {
+        console.error('Stock sheet sync failed:', error)
+        return { success: false, error: String(error) }
+    }
+}
+
 export async function initializeData() {
     try {
         const items = [

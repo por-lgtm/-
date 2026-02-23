@@ -1,10 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { importBookings, syncGoogleBookings, saveSystemSetting, getSystemSetting, analyzeGoogleSheet, type AnalysisResult, initializeData } from '@/app/actions'
-import { Upload, FileSpreadsheet, Save, RefreshCw, CheckCircle2, AlertCircle, FileSearch, AlertTriangle } from 'lucide-react'
+import { importBookings, syncGoogleBookings, saveSystemSetting, getSystemSetting, analyzeGoogleSheet, syncStockSheet, type AnalysisResult, initializeData } from '@/app/actions'
+import { Upload, FileSpreadsheet, Save, RefreshCw, CheckCircle2, AlertCircle, FileSearch, AlertTriangle, ClipboardList, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+
+type StockSyncResult = {
+    success: boolean
+    count?: number
+    changes?: { name: string; before: number; after: number }[]
+    date?: string
+    detail?: string
+    error?: string
+}
 
 export default function ImportPage() {
     const [status, setStatus] = useState<string>('')
@@ -12,11 +21,16 @@ export default function ImportPage() {
     const [isLoading, setIsLoading] = useState(false)
     const [analysisData, setAnalysisData] = useState<AnalysisResult | null>(null)
     const [showInitConfirm, setShowInitConfirm] = useState(false)
+    const [stockSheetUrl, setStockSheetUrl] = useState('')
+    const [stockSyncResult, setStockSyncResult] = useState<StockSyncResult | null>(null)
 
     useEffect(() => {
-        // Load setting on mount
+        // Load settings on mount
         getSystemSetting('GOOGLE_SHEET_URL').then(url => {
             if (url) setSheetUrl(url)
+        })
+        getSystemSetting('STOCK_SHEET_URL').then(url => {
+            if (url) setStockSheetUrl(url)
         })
     }, [])
 
@@ -85,6 +99,100 @@ export default function ImportPage() {
             </header>
 
             <div className="max-w-xl mx-auto space-y-8">
+
+                {/* Stock Sheet Sync (棚卸しスプシ) */}
+                <section className="bg-white p-6 rounded-xl shadow-sm border border-emerald-200">
+                    <div className="flex items-center gap-2 mb-4">
+                        <ClipboardList className="text-emerald-600" />
+                        <h2 className="text-lg font-bold">棚卸しスプレッドシート連携</h2>
+                    </div>
+                    <div className="space-y-4">
+                        <div className="text-sm text-slate-600 space-y-1">
+                            <p>棚卸し記録スプシの<strong>最新行</strong>を読み込んで在庫数を更新します。</p>
+                            <p className="text-xs text-slate-400">※ 列: 変更日 / 時間 / 詳細 / ボックスシーツ / デュベカバー / 枕カバー / バスタオル / フェイスタオル</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={stockSheetUrl}
+                                onChange={(e) => setStockSheetUrl(e.target.value)}
+                                placeholder="https://docs.google.com/.../pub?output=csv"
+                                className="flex-1 border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                            />
+                            <button
+                                onClick={async () => {
+                                    await saveSystemSetting('STOCK_SHEET_URL', stockSheetUrl)
+                                    setStatus('棚卸しスプシURLを保存しました')
+                                }}
+                                disabled={isLoading}
+                                className="bg-slate-100 text-slate-600 px-3 rounded hover:bg-slate-200"
+                            >
+                                <Save size={18} />
+                            </button>
+                        </div>
+                        <button
+                            onClick={async () => {
+                                setIsLoading(true)
+                                setStockSyncResult(null)
+                                setStatus('棚卸しスプシから同期中...')
+                                const result = await syncStockSheet(stockSheetUrl)
+                                setIsLoading(false)
+                                setStockSyncResult(result)
+                                if (result.success) {
+                                    await saveSystemSetting('STOCK_SHEET_URL', stockSheetUrl)
+                                    setStatus(`棚卸し同期完了: ${result.count}件の品目を更新しました`)
+                                } else {
+                                    setStatus(`エラー: ${result.error}`)
+                                }
+                            }}
+                            disabled={!stockSheetUrl || isLoading}
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
+                        >
+                            {isLoading ? <RefreshCw className="animate-spin" /> : <ClipboardList />}
+                            棚卸しデータを同期
+                        </button>
+
+                        {/* 同期結果 */}
+                        {stockSyncResult && stockSyncResult.success && (
+                            <div className="border rounded-lg overflow-hidden">
+                                <div className="bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-800 flex items-center gap-2">
+                                    <CheckCircle2 size={16} />
+                                    {stockSyncResult.date} {stockSyncResult.detail} — {stockSyncResult.count}件更新
+                                </div>
+                                {stockSyncResult.changes && stockSyncResult.changes.length > 0 ? (
+                                    <table className="w-full text-sm bg-white">
+                                        <thead className="bg-slate-50 text-xs text-slate-500">
+                                            <tr>
+                                                <th className="px-4 py-2 text-left border-b">品目</th>
+                                                <th className="px-4 py-2 text-right border-b">変更前</th>
+                                                <th className="px-2 py-2 border-b"></th>
+                                                <th className="px-4 py-2 text-right border-b">変更後</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {stockSyncResult.changes.map(ch => (
+                                                <tr key={ch.name}>
+                                                    <td className="px-4 py-2 font-medium text-slate-800">{ch.name}</td>
+                                                    <td className="px-4 py-2 text-right text-slate-500">{ch.before}</td>
+                                                    <td className="px-2 py-2 text-slate-400"><ArrowRight size={14} /></td>
+                                                    <td className={`px-4 py-2 text-right font-bold ${ch.after > ch.before ? 'text-blue-600' : 'text-red-600'}`}>{ch.after}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                ) : (
+                                    <p className="px-4 py-3 text-sm text-slate-500">変更なし（スプシと在庫数が一致しています）</p>
+                                )}
+                            </div>
+                        )}
+                        {stockSyncResult && !stockSyncResult.success && (
+                            <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 p-3 rounded">
+                                <AlertCircle size={16} />
+                                {stockSyncResult.error}
+                            </div>
+                        )}
+                    </div>
+                </section>
 
                 {/* Google Sheets Integration */}
                 <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
