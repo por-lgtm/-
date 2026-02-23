@@ -681,17 +681,20 @@ async function pushToHistorySheet(webhookUrl: string, detail: string) {
     const date = `${jst.getUTCFullYear()}/${String(jst.getUTCMonth() + 1).padStart(2, '0')}/${String(jst.getUTCDate()).padStart(2, '0')}`
     const time = `${String(jst.getUTCHours()).padStart(2, '0')}:${String(jst.getUTCMinutes()).padStart(2, '0')}`
 
-    const body = {
+    // GETパラメータとして送信（POSTのリダイレクト問題を回避）
+    const params = new URLSearchParams({
         date,
         time,
         detail,
-        ...stockMap
-    }
+        ...Object.fromEntries(
+            Object.entries(stockMap).map(([k, v]) => [k, String(v)])
+        )
+    })
 
-    const res = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(body),
+    const url = `${webhookUrl}?${params.toString()}`
+
+    const res = await fetch(url, {
+        method: 'GET',
         redirect: 'follow',
     })
 
