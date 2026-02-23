@@ -666,9 +666,7 @@ async function pushToHistorySheet(webhookUrl: string, detail: string) {
     }
 
     // 現在の在庫スナップショットを取得
-    const snapshots = await prisma.stockSnapshot.findMany({
-        include: { item: true }
-    })
+    const snapshots = await prisma.stockSnapshot.findMany()
 
     // 品目名 → 在庫数のマップを作成
     const stockMap: Record<string, number> = {}
