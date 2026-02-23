@@ -690,8 +690,9 @@ async function pushToHistorySheet(webhookUrl: string, detail: string) {
 
     const res = await fetch(webhookUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(body),
+        redirect: 'follow',
     })
 
     if (!res.ok) {
