@@ -95,6 +95,18 @@ export async function updateStock(itemId: string, delta: number, reason: StockUp
         ])
 
         revalidatePath('/')
+
+        // スプシ書き込み（失敗しても在庫更新はロールバックしない）
+        const webhookUrl = await getSystemSetting('HISTORY_WEBHOOK_URL')
+        if (webhookUrl) {
+            const detail = memo
+                ? `${reason}: ${memo}`
+                : reason === 'CORRECTION' ? '棚卸し訂正' : '在庫調整'
+            await pushToHistorySheet(webhookUrl, detail).catch(e =>
+                console.error('History sheet push failed (ignored):', e)
+            )
+        }
+
         return { success: true }
     } catch (error) {
         console.error('Failed to update stock:', error)
@@ -126,6 +138,15 @@ export async function updateStockBatch(updates: { itemId: string, delta: number 
         await prisma.$transaction([...transaction, ...snapshotUpdates])
 
         revalidatePath('/')
+
+        // スプシ書き込み（失敗しても在庫更新はロールバックしない）
+        const webhookUrl = await getSystemSetting('HISTORY_WEBHOOK_URL')
+        if (webhookUrl) {
+            await pushToHistorySheet(webhookUrl, '在庫調整 (一括)').catch(e =>
+                console.error('History sheet push failed (ignored):', e)
+            )
+        }
+
         return { success: true }
     } catch (error) {
         console.error('Failed to batch update:', error)
@@ -623,4 +644,65 @@ export async function initializeData() {
         console.error('Init failed:', error)
         return { success: false, error: String(error) }
     }
+}
+
+// ---- 履歴スプシ書き込みヘルパー ----
+
+/**
+ * Google Apps Script Web App（Webhook）を通じてスプシに1行追記する。
+ * 各品目の最新在庫スナップショットを取得して送信する。
+ * 失敗時は例外をthrowするので、呼び出し元でcatchすること。
+ */
+async function pushToHistorySheet(webhookUrl: string, detail: string) {
+    // 品目IDとスプシ列名のマッピング
+    const ITEM_MAP: Record<string, string> = {
+        'box-sheet': 'ボックスシーツ',
+        'duvet-cover': 'デュベカバー',
+        'pillow-cover': '枕カバー',
+        'bath-towel': 'バスタオル',
+        'face-towel': 'フェイスタオル',
+    }
+
+    // 現在の在庫スナップショットを取得
+    const snapshots = await prisma.stockSnapshot.findMany({
+        include: { item: true }
+    })
+
+    // 品目名 → 在庫数のマップを作成
+    const stockMap: Record<string, number> = {}
+    for (const snap of snapshots) {
+        const colName = ITEM_MAP[snap.itemId]
+        if (colName) stockMap[colName] = snap.shelfCount
+    }
+
+    // 日本時間で日付・時間を生成
+    const now = new Date()
+    const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
+    const date = `${jst.getUTCFullYear()}/${String(jst.getUTCMonth() + 1).padStart(2, '0')}/${String(jst.getUTCDate()).padStart(2, '0')}`
+    const time = `${String(jst.getUTCHours()).padStart(2, '0')}:${String(jst.getUTCMinutes()).padStart(2, '0')}`
+
+    const body = {
+        date,
+        time,
+        detail,
+        ...stockMap
+    }
+
+    const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+        throw new Error(`Webhook responded with status ${res.status}`)
+    }
+}
+
+export async function saveHistoryWebhookUrl(url: string) {
+    return saveSystemSetting('HISTORY_WEBHOOK_URL', url)
+}
+
+export async function getHistoryWebhookUrl() {
+    return getSystemSetting('HISTORY_WEBHOOK_URL')
 }

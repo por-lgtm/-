@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { importBookings, syncGoogleBookings, saveSystemSetting, getSystemSetting, analyzeGoogleSheet, syncStockSheet, type AnalysisResult, initializeData } from '@/app/actions'
+import { importBookings, syncGoogleBookings, saveSystemSetting, getSystemSetting, analyzeGoogleSheet, syncStockSheet, saveHistoryWebhookUrl, getHistoryWebhookUrl, type AnalysisResult, initializeData } from '@/app/actions'
 import { Upload, FileSpreadsheet, Save, RefreshCw, CheckCircle2, AlertCircle, FileSearch, AlertTriangle, ClipboardList, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
@@ -23,6 +23,8 @@ export default function ImportPage() {
     const [showInitConfirm, setShowInitConfirm] = useState(false)
     const [stockSheetUrl, setStockSheetUrl] = useState('')
     const [stockSyncResult, setStockSyncResult] = useState<StockSyncResult | null>(null)
+    const [historyWebhookUrl, setHistoryWebhookUrl] = useState('')
+    const [webhookSaved, setWebhookSaved] = useState(false)
 
     useEffect(() => {
         // Load settings on mount
@@ -31,6 +33,9 @@ export default function ImportPage() {
         })
         getSystemSetting('STOCK_SHEET_URL').then(url => {
             if (url) setStockSheetUrl(url)
+        })
+        getHistoryWebhookUrl().then(url => {
+            if (url) setHistoryWebhookUrl(url)
         })
     }, [])
 
@@ -99,6 +104,66 @@ export default function ImportPage() {
             </header>
 
             <div className="max-w-xl mx-auto space-y-8">
+
+                {/* 履歴スプシ Webhook 設定 */}
+                <section className="bg-white p-6 rounded-xl shadow-sm border border-violet-200">
+                    <div className="flex items-center gap-2 mb-3">
+                        <Save className="text-violet-600" />
+                        <h2 className="text-lg font-bold">履歴スプシ連携設定</h2>
+                    </div>
+                    <p className="text-sm text-slate-600 mb-3">
+                        在庫を変更するたびに、GoogleスプレッドシートへWebhook経由で自動記録します。
+                    </p>
+                    <details className="mb-3 text-xs text-slate-500 bg-slate-50 rounded p-3">
+                        <summary className="cursor-pointer font-medium text-slate-600">⚙️ Apps Scriptのセットアップ手順（初回のみ）</summary>
+                        <ol className="mt-2 space-y-1 list-decimal list-inside">
+                            <li>スプシを開く → 「拡張機能」→「Apps Script」</li>
+                            <li>下記コードを貼り付けて保存</li>
+                            <li>「デプロイ」→「新しいデプロイ」→「ウェブアプリ」</li>
+                            <li>アクセス: <strong>全員</strong> に設定してデプロイ</li>
+                            <li>発行された URL を下の欄に貼り付けて保存</li>
+                        </ol>
+                        <pre className="mt-2 bg-slate-100 p-2 rounded text-xs overflow-x-auto">{`function doPost(e) {
+  const data = JSON.parse(e.postData.contents);
+  const sheet = SpreadsheetApp.getActiveSpreadsheet()
+    .getSheetByName(data.sheetName || 'シート1');
+  sheet.appendRow([
+    data.date, data.time, data.detail,
+    data['ボックスシーツ'] ?? '',
+    data['デュベカバー'] ?? '',
+    data['枕カバー'] ?? '',
+    data['バスタオル'] ?? '',
+    data['フェイスタオル'] ?? '',
+  ]);
+  return ContentService
+    .createTextOutput(JSON.stringify({success:true}))
+    .setMimeType(ContentService.MimeType.JSON);
+}`}</pre>
+                    </details>
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={historyWebhookUrl}
+                            onChange={(e) => { setHistoryWebhookUrl(e.target.value); setWebhookSaved(false) }}
+                            placeholder="https://script.google.com/macros/s/.../exec"
+                            className="flex-1 border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-violet-500"
+                        />
+                        <button
+                            onClick={async () => {
+                                await saveHistoryWebhookUrl(historyWebhookUrl)
+                                setWebhookSaved(true)
+                            }}
+                            className="bg-violet-600 hover:bg-violet-700 text-white px-4 rounded font-bold text-sm transition-colors"
+                        >
+                            保存
+                        </button>
+                    </div>
+                    {webhookSaved && (
+                        <p className="mt-2 text-sm text-violet-700 flex items-center gap-1">
+                            <CheckCircle2 size={14} /> URLを保存しました。次回の在庫変更から記録されます。
+                        </p>
+                    )}
+                </section>
 
                 {/* Stock Sheet Sync (棚卸しスプシ) */}
                 <section className="bg-white p-6 rounded-xl shadow-sm border border-emerald-200">
