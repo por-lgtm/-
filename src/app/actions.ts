@@ -102,7 +102,7 @@ export async function updateStock(itemId: string, delta: number, reason: StockUp
         if (webhookUrl) {
             const detail = memo
                 ? `${reason}: ${memo}`
-                : reason === 'CORRECTION' ? '棚卸し訂正' : '在庫調整'
+                : reason === 'CORRECTION' ? '棚卸(修正)' : '在庫調整'
             await pushToHistorySheet(webhookUrl, detail).catch(e =>
                 console.error('History sheet push failed (ignored):', e)
             )
