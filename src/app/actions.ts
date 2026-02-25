@@ -100,13 +100,13 @@ export async function updateStock(itemId: string, delta: number, reason: StockUp
         const FALLBACK_WEBHOOK = 'https://script.google.com/macros/s/AKfycbx2XECLFaIwKb0vtYpcudSp4taw-0pWogFAfQLHUj_CeznKdF1ieAYycOYLTm6QzoJ4/exec'
         const webhookUrl = (await getSystemSetting('HISTORY_WEBHOOK_URL')) || FALLBACK_WEBHOOK
         if (webhookUrl) {
-            const detail = memo
-                ? `${reason}: ${memo}`
-                : reason === 'CORRECTION' ? '棚卸(修正)' : '在庫調整'
+            const detail = reason === 'CORRECTION'
+                ? (memo ? `棚卸 ${memo}` : '棚卸')
+                : (memo ? `在庫調整 ${memo}` : '在庫調整')
             const ITEM_MAP_LOCAL: Record<string, string> = {
                 'box-sheet': 'ボックスシーツ',
                 'duvet-cover': 'デュベカバー',
-                'pillow-cover': '枝カバー',
+                'pillow-cover': '枕カバー',
                 'bath-towel': 'バスタオル',
                 'face-towel': 'フェイスタオル',
             }
@@ -156,7 +156,7 @@ export async function updateStockBatch(updates: { itemId: string, delta: number 
             const ITEM_MAP_LOCAL: Record<string, string> = {
                 'box-sheet': 'ボックスシーツ',
                 'duvet-cover': 'デュベカバー',
-                'pillow-cover': '枝カバー',
+                'pillow-cover': '枕カバー',
                 'bath-towel': 'バスタオル',
                 'face-towel': 'フェイスタオル',
             }
