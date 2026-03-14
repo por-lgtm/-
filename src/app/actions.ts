@@ -1,4 +1,4 @@
-﻿'use server'
+'use server'
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
@@ -327,12 +327,31 @@ export async function getHistoryData(days = 30) {
         orderBy: { createdAt: 'desc' }
     })
 
+    // Fetch past planned events (bookings) to show in history
+    const pastPlannedEventsRaw = await prisma.plannedEvent.findMany({
+        where: { date: { gte: startDate, lte: today } },
+        orderBy: { date: 'desc' }
+    })
+    
+    // Convert PlannedEvent to match the shape of Event for HistoryTable
+    const pastPlannedEvents = pastPlannedEventsRaw.map(pe => ({
+        id: pe.id,
+        itemId: pe.itemId,
+        delta: pe.delta,
+        reason: 'BOOKING',
+        memo: pe.note,
+        createdAt: pe.date
+    }))
+
+    // Merge actual events and planned events
+    const allEvents = [...events, ...pastPlannedEvents].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+
     const history: Record<string, Record<string, { count: number, events: any[] }>> = {}
     const runningStock = new Map<string, number>()
     stockMap.forEach((v, k) => runningStock.set(k, v.current))
 
-    const eventsByDay: Record<string, typeof events> = {}
-    events.forEach(e => {
+    const eventsByDay: Record<string, typeof allEvents> = {}
+    allEvents.forEach(e => {
         const dKey = format(e.createdAt, 'yyyy-MM-dd')
         if (!eventsByDay[dKey]) eventsByDay[dKey] = []
         eventsByDay[dKey].push(e)

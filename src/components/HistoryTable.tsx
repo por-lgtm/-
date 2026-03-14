@@ -98,7 +98,8 @@ export default function HistoryTable({ stockMap, history }: HistoryTableProps) {
                                 <div key={i} className="flex justify-between items-start border-l-4 border-slate-300 pl-3 py-1">
                                     <div>
                                         <div className="text-sm font-bold text-slate-800">
-                                            {e.reason === 'OTHER' ? 'その他' :
+                                            {e.reason === 'BOOKING' ? '宿泊（自動）' :
+                                                e.reason === 'OTHER' ? 'その他' :
                                                 e.reason === 'PURCHASE' ? '納品' :
                                                     e.reason === 'LAUNDRY' ? 'リネン' :
                                                         e.reason === 'LOST' ? '紛失' :
