@@ -64,14 +64,31 @@ export async function GET(request: Request) {
             return NextResponse.json({ success: true, message: 'No check-ins today', date: todayStr })
         }
 
+        // --- Consumption Helper ---
+        function ceilHalf(n: number) { return Math.ceil(n / 2) }
+        function calculateConsumption(guests: number, formulaType: string): number {
+            const N = guests
+            if (N <= 0) return 0
+            switch (formulaType) {
+                case 'SIMPLE': return N
+                case 'TOWEL_B': return N + ceilHalf(N) + 8
+                case 'TOWEL_F': return N + ceilHalf(N) + 3
+                default: return N
+            }
+        }
+
+        // --- Fetch Items to compute formulas ---
+        const items = await prisma.item.findMany()
+
         // 各チェックイン行をリネン履歴に記録
         const results = []
         for (const row of todayRows) {
             const name = row['宿泊者名'] ?? ''
-            const guests = row['人数'] ?? ''
-            const detail = `${todayStr} ${name} ${guests}名`
+            const guestsStr = row['人数'] ?? ''
+            const guests = parseInt(guestsStr, 10)
+            const detail = `${todayStr} ${name} ${guestsStr}名`
 
-            // GAS Webhook に送信（在庫スナップショットのみ記録、変動なし）
+            // GAS Webhook に送信（在庫スナップショットと変動記録）
             const params = new URLSearchParams({ date: todayStr, time: '10:00', detail })
 
             // 在庫スナップショットを追加
@@ -83,9 +100,22 @@ export async function GET(request: Request) {
                 'bath-towel': 'バスタオル',
                 'face-towel': 'フェイスタオル',
             }
+            
             for (const snap of snapshots) {
                 const colName = ITEM_MAP[snap.itemId]
                 if (colName) params.set(colName, String(snap.shelfCount))
+            }
+
+            // 消費マイナス分（変動）を計算して追加
+            if (!isNaN(guests) && guests > 0) {
+                for (const item of items) {
+                    const colName = ITEM_MAP[item.id]
+                    if (colName) {
+                        const consumption = calculateConsumption(guests, item.formulaType)
+                        // Decrease is negative
+                        params.set(`${colName}変動`, String(-consumption))
+                    }
+                }
             }
 
             const url = `${webhookUrl}?${params.toString()}`
