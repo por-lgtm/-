@@ -322,29 +322,10 @@ export async function getHistoryData(days = 30) {
         stockMap.set(item.id, { current: s?.shelfCount ?? 0, name: item.name })
     })
 
-    const events = await prisma.actualEvent.findMany({
+    const allEvents = await prisma.actualEvent.findMany({
         where: { createdAt: { gte: startDate } },
         orderBy: { createdAt: 'desc' }
     })
-
-    // Fetch past planned events (bookings) to show in history
-    const pastPlannedEventsRaw = await prisma.plannedEvent.findMany({
-        where: { date: { gte: startDate, lte: today } },
-        orderBy: { date: 'desc' }
-    })
-    
-    // Convert PlannedEvent to match the shape of Event for HistoryTable
-    const pastPlannedEvents = pastPlannedEventsRaw.map(pe => ({
-        id: pe.id,
-        itemId: pe.itemId,
-        delta: pe.delta,
-        reason: 'BOOKING',
-        memo: pe.note,
-        createdAt: pe.date
-    }))
-
-    // Merge actual events and planned events
-    const allEvents = [...events, ...pastPlannedEvents].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
     const history: Record<string, Record<string, { count: number, events: any[] }>> = {}
     const runningStock = new Map<string, number>()

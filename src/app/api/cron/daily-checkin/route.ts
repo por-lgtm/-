@@ -88,6 +88,15 @@ export async function GET(request: Request) {
             const guests = parseInt(guestsStr, 10)
             const detail = `${todayStr} ${name} ${guestsStr}名`
 
+            // 二重実行防止（同じ日付・名前のBOOKING記録がすでにあるか確認）
+            const existingEvent = await prisma.actualEvent.findFirst({
+                where: { reason: 'BOOKING', memo: detail }
+            })
+            if (existingEvent) {
+                console.log(`Already processed today: ${detail}`)
+                continue
+            }
+
             // GAS Webhook に送信（在庫スナップショットと変動記録）
             const params = new URLSearchParams({ date: todayStr, time: '10:00', detail })
 
@@ -106,7 +115,8 @@ export async function GET(request: Request) {
                 if (colName) params.set(colName, String(snap.shelfCount))
             }
 
-            // 消費マイナス分（変動）を計算して追加
+            // 消費マイナス分（変動）を計算して追加 & DB更新の準備
+            const dbUpdates: any[] = []
             if (!isNaN(guests) && guests > 0) {
                 for (const item of items) {
                     const colName = ITEM_MAP[item.id]
@@ -114,6 +124,17 @@ export async function GET(request: Request) {
                         const consumption = calculateConsumption(guests, item.formulaType)
                         // Decrease is negative
                         params.set(`${colName}変動`, String(-consumption))
+
+                        if (consumption > 0) {
+                            dbUpdates.push(prisma.actualEvent.create({
+                                data: { itemId: item.id, delta: -consumption, reason: 'BOOKING', memo: detail }
+                            }))
+                            dbUpdates.push(prisma.stockSnapshot.upsert({
+                                where: { itemId: item.id },
+                                update: { shelfCount: { decrement: consumption } },
+                                create: { itemId: item.id, shelfCount: -consumption }
+                            }))
+                        }
                     }
                 }
             }
@@ -121,6 +142,11 @@ export async function GET(request: Request) {
             const url = `${webhookUrl}?${params.toString()}`
             const gasRes = await fetch(url, { method: 'GET', redirect: 'follow' })
             results.push({ detail, status: gasRes.status, ok: gasRes.ok })
+
+            // Webhook送信が成功した場合のみDBの在庫を減らす
+            if (gasRes.ok && dbUpdates.length > 0) {
+                await prisma.$transaction(dbUpdates)
+            }
         }
 
         return NextResponse.json({ success: true, date: todayStr, recorded: results })
