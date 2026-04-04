@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import Papa from 'papaparse'
-import { parseFlexibleDate, calculateConsumption } from '@/app/actions'
-import { addDays, format } from 'date-fns'
+import { addDays, format, parseISO } from 'date-fns'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,6 +53,39 @@ export async function GET(request: Request) {
         const now = new Date()
         const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
         const todayStr = `${jst.getUTCFullYear()}/${String(jst.getUTCMonth() + 1).padStart(2, '0')}/${String(jst.getUTCDate()).padStart(2, '0')}`
+
+        // --- Helpers ---
+        function ceilHalf(n: number) { return Math.ceil(n / 2) }
+        function calculateConsumption(guests: number, formulaType: string, nthDay: number = 1): number {
+            const N = guests
+            if (N <= 0) return 0
+            switch (formulaType) {
+                case 'SIMPLE':
+                    if (nthDay % 2 === 0) return 0;
+                    return N
+                case 'TOWEL_B':
+                    return N + ceilHalf(N) + 8
+                case 'TOWEL_F':
+                    return N + ceilHalf(N) + 3
+                default:
+                    return N
+            }
+        }
+        function parseFlexibleDate(dateStr: string): Date {
+            if (!dateStr) return new Date(NaN)
+            const normalized = dateStr.replaceAll('/', '-')
+            const d1 = parseISO(normalized)
+            if (!isNaN(d1.getTime())) return d1
+            const parts = normalized.split('-')
+            if (parts.length === 3) {
+                const y = parts[0]
+                const m = parts[1].padStart(2, '0')
+                const day = parts[2].padStart(2, '0')
+                const d2 = parseISO(`${y}-${m}-${day}`)
+                if (!isNaN(d2.getTime())) return d2
+            }
+            return new Date(NaN)
+        }
 
         // 本日滞在中の行を抽出
         const todayRows = data.filter((row: any) => {

@@ -36,7 +36,7 @@ function ceilHalf(n: number) {
     return Math.ceil(n / 2)
 }
 
-export function calculateConsumption(guests: number, formulaType: string, nthDay: number = 1): number {
+function calculateConsumption(guests: number, formulaType: string, nthDay: number = 1): number {
     const N = guests
     if (N <= 0) return 0
     switch (formulaType) {
@@ -53,7 +53,7 @@ export function calculateConsumption(guests: number, formulaType: string, nthDay
     }
 }
 
-export function parseFlexibleDate(dateStr: string): Date {
+function parseFlexibleDate(dateStr: string): Date {
     if (!dateStr) return new Date(NaN)
 
     // Normalize separators
