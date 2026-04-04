@@ -240,8 +240,18 @@ export async function importBookings(formData: FormData) {
 }
 
 export async function getForecastData(days = 14) {
-    const today = startOfDay(new Date())
+    const now = new Date()
+    const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
+    const jstYear = jst.getUTCFullYear()
+    const jstMonth = String(jst.getUTCMonth() + 1).padStart(2, '0')
+    const jstDate = String(jst.getUTCDate()).padStart(2, '0')
+    
+    // UTC Midnight representing JST Date (aligns with Prisma date math)
+    const today = parseISO(`${jstYear}-${jstMonth}-${jstDate}`)
     const endDate = addDays(today, days)
+    
+    // 朝10時以降であれば、今日のクーロン（在庫実引き落とし）はすでに完了しているとみなす
+    const hasCronRunToday = jst.getUTCHours() >= 10
 
     const stocks = await prisma.stockSnapshot.findMany()
     const items = await prisma.item.findMany()
@@ -278,10 +288,13 @@ export async function getForecastData(days = 14) {
         const daysEvents = planned.filter(e => startOfDay(e.date).getTime() === d.getTime())
 
         // Apply deltas to running stock
-        daysEvents.forEach(e => {
-            const current = runningStock.get(e.itemId) ?? 0
-            runningStock.set(e.itemId, current + e.delta)
-        })
+        const isToday = i === 0;
+        if (!(isToday && hasCronRunToday)) {
+            daysEvents.forEach(e => {
+                const current = runningStock.get(e.itemId) ?? 0
+                runningStock.set(e.itemId, current + e.delta)
+            })
+        }
 
         // Capture snapshot for this day, now including events per item
         const dailyStatus: Record<string, { count: number, events: any[] }> = {}
@@ -316,7 +329,13 @@ export async function getForecastData(days = 14) {
 }
 
 export async function getHistoryData(days = 30) {
-    const today = startOfDay(new Date())
+    const now = new Date()
+    const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
+    const jstYear = jst.getUTCFullYear()
+    const jstMonth = String(jst.getUTCMonth() + 1).padStart(2, '0')
+    const jstDate = String(jst.getUTCDate()).padStart(2, '0')
+    const today = parseISO(`${jstYear}-${jstMonth}-${jstDate}`)
+
     const startDate = addDays(today, -days)
 
     const stocks = await prisma.stockSnapshot.findMany()
