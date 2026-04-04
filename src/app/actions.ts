@@ -36,18 +36,24 @@ function ceilHalf(n: number) {
     return Math.ceil(n / 2)
 }
 
-function calculateConsumption(guests: number, formulaType: string): number {
+export function calculateConsumption(guests: number, formulaType: string, nthDay: number = 1): number {
     const N = guests
     if (N <= 0) return 0
     switch (formulaType) {
-        case 'SIMPLE': return N
-        case 'TOWEL_B': return N + ceilHalf(N) + 8
-        case 'TOWEL_F': return N + ceilHalf(N) + 3
-        default: return N
+        case 'SIMPLE': 
+            // 2回使用で交換: 1日目、3日目、5日目に消費 (nthDayが偶数の日はゼロ)
+            if (nthDay % 2 === 0) return 0;
+            return N
+        case 'TOWEL_B': 
+            return N + ceilHalf(N) + 8
+        case 'TOWEL_F': 
+            return N + ceilHalf(N) + 3
+        default: 
+            return N
     }
 }
 
-function parseFlexibleDate(dateStr: string): Date {
+export function parseFlexibleDate(dateStr: string): Date {
     if (!dateStr) return new Date(NaN)
 
     // Normalize separators
@@ -400,6 +406,9 @@ export async function syncGoogleBookings(url: string) {
             const name = row['宿泊者名'] ?? row['人数'] // Fallback for old format if needed, but prioritize '宿泊者名'
             const guestsStr = row['人数'] ?? row['備考'] // Prioritize '人数' for guests
 
+            const nightsStr = row['宿泊日数'] ?? '1'
+            const nights = parseInt(nightsStr, 10) || 1
+
             if (!dateStr || !guestsStr) continue
             const guests = parseInt(guestsStr, 10)
             if (isNaN(guests)) continue
@@ -419,16 +428,22 @@ export async function syncGoogleBookings(url: string) {
             })
             await prisma.plannedEvent.deleteMany({ where: { bookingId } })
 
-            const plannedEventsData = items.map(item => {
-                const consumption = calculateConsumption(guests, item.formulaType)
-                return {
-                    bookingId,
-                    itemId: item.id,
-                    date: startOfDay(checkIn),
-                    delta: -consumption,
-                    note: `${name}様 Check-in`,
+            const plannedEventsData: any[] = []
+            for (let n = 1; n <= nights; n++) {
+                const targetDate = addDays(startOfDay(checkIn), n - 1)
+                for (const item of items) {
+                    const consumption = calculateConsumption(guests, item.formulaType, n)
+                    if (consumption > 0) {
+                        plannedEventsData.push({
+                            bookingId,
+                            itemId: item.id,
+                            date: targetDate,
+                            delta: -consumption,
+                            note: `${name}様 滞在${n}日目`,
+                        })
+                    }
                 }
-            })
+            }
             if (plannedEventsData.length > 0) await prisma.plannedEvent.createMany({ data: plannedEventsData })
             count++
         }

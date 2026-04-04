@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import Papa from 'papaparse'
+import { parseFlexibleDate, calculateConsumption } from '@/app/actions'
+import { addDays, format } from 'date-fns'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,28 +55,32 @@ export async function GET(request: Request) {
         const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
         const todayStr = `${jst.getUTCFullYear()}/${String(jst.getUTCMonth() + 1).padStart(2, '0')}/${String(jst.getUTCDate()).padStart(2, '0')}`
 
-        // 本日チェックインの行を抽出
-        const todayRows = data.filter(row => {
+        // 本日滞在中の行を抽出
+        const todayRows = data.filter((row: any) => {
             const dateVal = row['日付'] ?? ''
-            // YYYY/MM/DD または YYYY-MM-DD 形式に対応
-            return dateVal.replace(/-/g, '/').trim() === todayStr
+            if (!dateVal) return false;
+
+            const checkInDate = parseFlexibleDate(dateVal);
+            if (isNaN(checkInDate.getTime())) {
+                // フォールバック: 単純な文字列一致
+                return dateVal.replace(/-/g, '/').trim() === todayStr;
+            }
+
+            const nights = parseInt(row['宿泊日数'] ?? '1', 10) || 1;
+            
+            for (let n = 1; n <= nights; n++) {
+                const targetDate = addDays(checkInDate, n - 1);
+                const targetStr = format(targetDate, 'yyyy/MM/dd');
+                if (targetStr === todayStr) {
+                    row._nthDay = n;
+                    return true;
+                }
+            }
+            return false;
         })
 
         if (todayRows.length === 0) {
             return NextResponse.json({ success: true, message: 'No check-ins today', date: todayStr })
-        }
-
-        // --- Consumption Helper ---
-        function ceilHalf(n: number) { return Math.ceil(n / 2) }
-        function calculateConsumption(guests: number, formulaType: string): number {
-            const N = guests
-            if (N <= 0) return 0
-            switch (formulaType) {
-                case 'SIMPLE': return N
-                case 'TOWEL_B': return N + ceilHalf(N) + 8
-                case 'TOWEL_F': return N + ceilHalf(N) + 3
-                default: return N
-            }
         }
 
         // --- Fetch Items to compute formulas ---
@@ -86,7 +92,10 @@ export async function GET(request: Request) {
             const name = row['宿泊者名'] ?? ''
             const guestsStr = row['人数'] ?? ''
             const guests = parseInt(guestsStr, 10)
-            const detail = `${todayStr} ${name} ${guestsStr}名`
+            const nthDay = Number(row._nthDay) || 1;
+            // メモに滞在日目を入れてユニークにする（これにより再実行時の二重引き算も防ぐ）
+            const dayDesc = nthDay > 1 ? ` (滞在${nthDay}日目)` : ''
+            const detail = `${todayStr} ${name} ${guestsStr}名${dayDesc}`
 
             // 二重実行防止（同じ日付・名前のBOOKING記録がすでにあるか確認）
             const existingEvent = await prisma.actualEvent.findFirst({
@@ -117,15 +126,18 @@ export async function GET(request: Request) {
 
             // 消費マイナス分（変動）を計算して追加 & DB更新の準備
             const dbUpdates: any[] = []
+            let hasConsumption = false
+
             if (!isNaN(guests) && guests > 0) {
                 for (const item of items) {
                     const colName = ITEM_MAP[item.id]
                     if (colName) {
-                        const consumption = calculateConsumption(guests, item.formulaType)
+                        const consumption = calculateConsumption(guests, item.formulaType, nthDay)
                         // Decrease is negative
                         params.set(`${colName}変動`, String(-consumption))
 
                         if (consumption > 0) {
+                            hasConsumption = true
                             dbUpdates.push(prisma.actualEvent.create({
                                 data: { itemId: item.id, delta: -consumption, reason: 'BOOKING', memo: detail }
                             }))
@@ -139,6 +151,8 @@ export async function GET(request: Request) {
                 }
             }
 
+            // もし消費が0枚（シーツ交換なし日など）でもWebhookは飛ばす（Snapshot記録として）か？
+            // もし全アイテム消費0なら何もDB変更しないが、Webhookは送信する
             const url = `${webhookUrl}?${params.toString()}`
             const gasRes = await fetch(url, { method: 'GET', redirect: 'follow' })
             results.push({ detail, status: gasRes.status, ok: gasRes.ok })
