@@ -137,6 +137,12 @@ export async function GET(request: Request) {
                         params.set(`${colName}変動`, String(-consumption))
 
                         if (consumption > 0) {
+                            // Webhookに送るスナップショットの数字も、「引き算後」の新しい数字に上書きする（表示ズレ防止）
+                            const prevSnapStr = params.get(colName)
+                            if (prevSnapStr) {
+                                params.set(colName, String(parseInt(prevSnapStr, 10) - consumption))
+                            }
+
                             hasConsumption = true
                             dbUpdates.push(prisma.actualEvent.create({
                                 data: { itemId: item.id, delta: -consumption, reason: 'BOOKING', memo: detail }
