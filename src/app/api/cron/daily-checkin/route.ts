@@ -95,7 +95,13 @@ export async function GET(request: Request) {
             const checkInDate = parseFlexibleDate(dateVal);
             if (isNaN(checkInDate.getTime())) {
                 // フォールバック: 単純な文字列一致
-                return dateVal.replace(/-/g, '/').trim() === todayStr;
+                if (dateVal.replace(/-/g, '/').trim() !== todayStr) return false;
+            }
+
+            // キャンセル判定
+            const statusStr = String(row['ステータス'] || row['状況'] || row['status'] || row['Status'] || '').trim()
+            if (statusStr && statusStr !== '予約あり') {
+                return false;
             }
 
             const nights = parseInt(row['宿泊日数'] ?? '1', 10) || 1;

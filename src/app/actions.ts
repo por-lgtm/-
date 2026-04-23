@@ -432,6 +432,12 @@ export async function syncGoogleBookings(url: string) {
             const guests = parseInt(guestsStr, 10)
             if (isNaN(guests)) continue
 
+            // キャンセル判定
+            const statusStr = String(row['ステータス'] || row['状況'] || row['status'] || row['Status'] || '').trim()
+            if (statusStr && statusStr !== '予約あり') {
+                continue // 予約あり以外（キャンセル等）はスキップし、削除対象に含める
+            }
+
             const checkIn = parseFlexibleDate(dateStr)
             if (isNaN(checkIn.getTime())) continue
 
