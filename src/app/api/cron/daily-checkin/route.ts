@@ -89,7 +89,8 @@ export async function GET(request: Request) {
 
         // 本日滞在中の行を抽出
         const todayRows = data.filter((row: any) => {
-            const dateVal = row['日付'] ?? ''
+            const rowValues = Object.values(row)
+            const dateVal = String(row['日付'] || rowValues[0] || '')
             if (!dateVal) return false;
 
             const checkInDate = parseFlexibleDate(dateVal);
@@ -99,18 +100,26 @@ export async function GET(request: Request) {
             }
 
             // キャンセル判定
-            const statusStr = String(row['ステータス'] || row['状況'] || row['status'] || row['Status'] || '').trim()
+            const rowValues = Object.values(row)
+            const statusStr = String(row['ステータス'] || row['状況'] || row['status'] || row['Status'] || rowValues[4] || '').trim()
             if (statusStr && statusStr !== '予約あり') {
                 return false;
             }
 
-            const nights = parseInt(row['宿泊日数'] ?? '1', 10) || 1;
+            const nightsStr = row['宿泊日数'] || rowValues[3] || '1';
+            const nights = parseInt(String(nightsStr), 10) || 1;
             
             for (let n = 1; n <= nights; n++) {
                 const targetDate = addDays(checkInDate, n - 1);
                 const targetStr = format(targetDate, 'yyyy/MM/dd');
                 if (targetStr === todayStr) {
                     row._nthDay = n;
+                    
+                    const name = row['宿泊者名'] || row['名前'] || rowValues[1] || ''
+                    const guestsStr = row['人数'] || rowValues[2] || ''
+                    row._name = name
+                    row._guestsStr = guestsStr
+                    
                     return true;
                 }
             }
@@ -127,8 +136,8 @@ export async function GET(request: Request) {
         // 各チェックイン行をリネン履歴に記録
         const results = []
         for (const row of todayRows) {
-            const name = row['宿泊者名'] ?? ''
-            const guestsStr = row['人数'] ?? ''
+            const name = row._name ?? ''
+            const guestsStr = row._guestsStr ?? ''
             const guests = parseInt(guestsStr, 10)
             const nthDay = Number(row._nthDay) || 1;
             // メモに滞在日目を入れてユニークにする（これにより再実行時の二重引き算も防ぐ）

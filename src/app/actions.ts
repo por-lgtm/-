@@ -421,19 +421,21 @@ export async function syncGoogleBookings(url: string) {
         const validBookingIds = new Set<string>()
 
         for (const row of data as any[]) {
-            const dateStr = row['日付']
-            const name = row['宿泊者名'] ?? row['人数'] // Fallback for old format if needed, but prioritize '宿泊者名'
-            const guestsStr = row['人数'] ?? row['備考'] // Prioritize '人数' for guests
+            const rowValues = Object.values(row)
+            const dateStr = row['日付'] || rowValues[0]
+            const name = row['宿泊者名'] || row['名前'] || rowValues[1] || ''
+            const guestsStr = row['人数'] || rowValues[2] || ''
 
-            const nightsStr = row['宿泊日数'] ?? '1'
-            const nights = parseInt(nightsStr, 10) || 1
+            const nightsStr = row['宿泊日数'] || rowValues[3] || '1'
+            const nights = parseInt(String(nightsStr), 10) || 1
 
             if (!dateStr || !guestsStr) continue
             const guests = parseInt(guestsStr, 10)
             if (isNaN(guests)) continue
 
             // キャンセル判定
-            const statusStr = String(row['ステータス'] || row['状況'] || row['status'] || row['Status'] || '').trim()
+            const rowValues = Object.values(row)
+            const statusStr = String(row['ステータス'] || row['状況'] || row['status'] || row['Status'] || rowValues[4] || '').trim()
             if (statusStr && statusStr !== '予約あり') {
                 continue // 予約あり以外（キャンセル等）はスキップし、削除対象に含める
             }
